@@ -31,9 +31,9 @@ Overview
     :alt: PyPI Package latest release
     :target: https://pypi.org/project/chlamys
 
-.. |commits-since| image:: https://img.shields.io/github/commits-since/dougmvieira/chlamys/v0.0.0.svg
+.. |commits-since| image:: https://img.shields.io/github/commits-since/dougmvieira/chlamys/v0.1.0.svg
     :alt: Commits since latest release
-    :target: https://github.com/dougmvieira/chlamys/compare/v0.0.0...master
+    :target: https://github.com/dougmvieira/chlamys/compare/v0.1.0...master
 
 .. |wheel| image:: https://img.shields.io/pypi/wheel/chlamys.svg
     :alt: PyPI Wheel
