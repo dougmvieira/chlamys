@@ -9,9 +9,6 @@ matrix:
     - python: '3.7'
       env:
         - TOXENV=check
-    - python: '3.7'
-      env:
-        - TOXENV=docs
 {%- for env in tox_environments %}{{ '' }}
 {% if env.startswith("pypy3") %}
     - python: 'pypy3.5-6.0'
