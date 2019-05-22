@@ -24,15 +24,56 @@ class Delaunay1D:
         return found
 
 
-def plane(x, bases, heights):
-    bases, heights = map(np.array, [bases, heights])
+def plane(xi, points, values):
+    """Planar interpolation on a simplex
 
-    alpha = np.linalg.solve(bases[1:] - bases[0], heights[1:] - heights[0])
-    return (np.stack(x, axis=-1) - bases[0]).dot(alpha) + heights[0]
+    Interpolation via an D-dimensional plane given D+1 points of a simplex.
+
+    Parameters
+    ----------
+    xi : tuple of 1-D array, shape (M, D)
+        Points at which to interpolate data.
+    points : ndarray of floats, shape (D+1, D)
+        Data point coordinates.
+    values : ndarray of floats, shape (D+1,)
+        Data values.
+
+    Returns
+    -------
+    ndarray
+        Array of interpolated values.
+
+    """
+
+    alpha = np.linalg.solve(points[1:] - points[0], values[1:] - values[0])
+    return (np.stack(xi, axis=-1) - points[0]).dot(alpha) + values[0]
 
 
-def cubic_patch(interpolands, bases, heights, grad):
-    dim = bases.shape[1]
+def cubic_patch(xi, points, values, grad):
+    """Cubic patch interpolation on a simplex
+
+    Interpolation via an D-dimensional cubic polynomial given D+1 points of a
+    simplex and their gradients.
+
+    Parameters
+    ----------
+    xi : tuple of 1-D array, shape (M, D)
+        Points at which to interpolate data.
+    points : ndarray of floats, shape (D+1, D)
+        Data point coordinates.
+    values : ndarray of floats, shape (D+1,)
+        Data values.
+    grad : ndarray of floats, shape (D+1, D)
+        Data gradients.
+
+    Returns
+    -------
+    ndarray
+        Array of interpolated values.
+
+    """
+
+    dim = points.shape[1]
     x = [sy.Symbol('x_{}'.format(i)) for i in range(dim)]
 
     monomials = sy.expand((1 + sum(x))**3).args
@@ -43,49 +84,91 @@ def cubic_patch(interpolands, bases, heights, grad):
 
     lhs = iter([])
     for fs in chain([monomials_f], monomials_grad):
-        lhs = chain(lhs, [np.array([f(*x_val) for f in fs]) for x_val in zip(*np.transpose(bases))])
+        lhs = chain(lhs, [np.array([f(*x_val) for f in fs]) for x_val in zip(*np.transpose(points))])
     lhs = np.array(list(lhs))
-    rhs = np.ravel([heights] + np.transpose(grad).tolist())
+    rhs = np.ravel([values] + np.transpose(grad).tolist())
 
     coeffs = np.linalg.pinv(lhs).dot(rhs)
 
     lbda = sy.lambdify(x, sum((c*m for c, m in zip(coeffs, monomials))), "numpy")
-    return lbda(*interpolands)
+    return lbda(*xi)
 
 
-def _interp_functor(interpolator, interpolands, anchors_base, *anchors_args):
-    anchors_base = np.array(anchors_base)
-    anchors_args = tuple(map(np.array, anchors_args))
-    interpolands = tuple(map(np.array, interpolands))
+def _interp_functor(interpolator, xi, points, *points_props):
+    points = np.array(points)
+    points_props = tuple(map(np.array, points_props))
+    xi = tuple(map(np.array, xi))
 
-    delaunay = (spatial.Delaunay(anchors_base) if anchors_base.shape[1] >= 2
-                else Delaunay1D(anchors_base[:, 0]))
-    simplex_map = delaunay.find_simplex(np.stack(interpolands, axis=-1))
+    delaunay = (spatial.Delaunay(points) if points.shape[1] >= 2
+                else Delaunay1D(points[:, 0]))
+    simplex_map = delaunay.find_simplex(np.stack(xi, axis=-1))
     simplex_outer_loc = np.unique(delaunay.convex_hull)
 
-    simplex_outer_base = anchors_base[simplex_outer_loc]
-    simplex_outer_args = tuple(arg[simplex_outer_loc] for arg in anchors_args)
-    interp = (interpolator(interpolands, simplex_outer_base, *simplex_outer_args)
-              if len(simplex_outer_loc) == anchors_base.shape[0] - 1
-              else np.full(interpolands[0].shape, np.nan))
+    simplex_outer_base = points[simplex_outer_loc]
+    simplex_outer_args = tuple(arg[simplex_outer_loc] for arg in points_props)
+    interp = (interpolator(xi, simplex_outer_base, *simplex_outer_args)
+              if len(simplex_outer_loc) == points.shape[0] - 1
+              else np.full(xi[0].shape, np.nan))
 
     for i, s in enumerate(delaunay.simplices):
         mask = simplex_map == i
-        masked_interpolands = tuple(dim[mask] for dim in interpolands)
+        masked_xi = tuple(dim[mask] for dim in xi)
 
-        simplex_base = anchors_base[s]
-        simplex_args = tuple(arg[s] for arg in anchors_args)
+        simplex_base = points[s]
+        simplex_args = tuple(arg[s] for arg in points_props)
 
-        interp[mask] = interpolator(masked_interpolands, simplex_base,
-                                    *simplex_args)
+        interp[mask] = interpolator(masked_xi, simplex_base, *simplex_args)
 
     return interp
 
 
-def interp_levels(anchors_base, anchors_height, interpolands):
-    return _interp_functor(plane, interpolands, anchors_base, anchors_height)
+def interp_levels(points, values, xi):
+    """Linear Delaunay interpolation
+
+    Interpolation on D-dimensional scattered points via Delaunay triangulation
+    and planar interpolation.
+
+    Parameters
+    ----------
+    points : ndarray of floats, shape (N, D)
+        Data point coordinates.
+    values : ndarray of floats, shape (N,)
+        Data values.
+    xi : tuple of 1-D array, shape (M, D)
+        Points at which to interpolate data.
+
+    Returns
+    -------
+    ndarray
+        Array of interpolated values.
+
+    """
+
+    return _interp_functor(plane, xi, points, values)
 
 
-def interp_1st_order(anchors_base, anchors_height, anchors_grad, interpolands):
-    return _interp_functor(cubic_patch, interpolands, anchors_base,
-                           anchors_height, anchors_grad)
+def interp_1st_order(points, values, grads, xi):
+    """1st-order cubic Delaunay interpolation
+
+    Interpolation on D-dimensional scattered points via Delaunay triangulation
+    and cubic interpolation with gradient information.
+
+    Parameters
+    ----------
+    points : ndarray of floats, shape (N, D)
+        Data point coordinates.
+    values : ndarray of floats, shape (N,)
+        Data values.
+    grads : ndarray of floats, shape (N, D)
+        Data gradients.
+    xi : tuple of 1-D array, shape (M, D)
+        Points at which to interpolate data.
+
+    Returns
+    -------
+    ndarray
+        Array of interpolated values.
+
+    """
+
+    return _interp_functor(cubic_patch, xi, points, values, grads)
