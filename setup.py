@@ -20,7 +20,7 @@ def read(*names, **kwargs):
 
 setup(
     name='chlamys',
-    version='0.1.0',
+    version='0.2.0',
     license='MIT license',
     description='Smooth interpolation on scattered data with levels and slopes.',
     long_description='%s\n%s' % (
