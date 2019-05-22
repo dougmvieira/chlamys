@@ -5,12 +5,14 @@ import os
 
 
 extensions = [
+    'matplotlib.sphinxext.plot_directive',
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.coverage',
     'sphinx.ext.doctest',
     'sphinx.ext.extlinks',
     'sphinx.ext.ifconfig',
+    'sphinx.ext.mathjax',
     'sphinx.ext.napoleon',
     'sphinx.ext.todo',
     'sphinx.ext.viewcode',
